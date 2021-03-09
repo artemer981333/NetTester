@@ -16,39 +16,47 @@ namespace Client
 {
     public partial class Form1 : Form
     {
-        NetMetrics metrics;
-        public System.Diagnostics.Stopwatch timer;
+        NetStatistics statistics;
 
-        List<double> PingCollection, SpeedCollection, DelayCollection, DeliveryKoefCollection, PacketLooseCollection, TimeCollection;
         public Form1()
         {
-            PingCollection = new List<double>();
-            SpeedCollection = new List<double>();
-            DelayCollection = new List<double>();
-            DeliveryKoefCollection = new List<double>();
-            PacketLooseCollection = new List<double>();
-            TimeCollection = new List<double>();
-            timer = new System.Diagnostics.Stopwatch();
             InitializeComponent();
         }
 
         private void Connect()
         {
-            if (metrics != null)
-                if (metrics.Connected && metrics.Protocol == ProtocolType.Text)
-                    return;
-            switch (ProtocolType.SelectedIndex)
+            NetStatistics.ProtocolType protocolType;
+            switch (ProtocolType.Text)
             {
-                case 0:
+                case "TCP":
                     {
-                        metrics = new NetMetricsTCP();
-                        metrics.Connect(InputIP.Text, 8080);
+                        protocolType = NetStatistics.ProtocolType.TCP;
                         break;
                     }
-                case 1:
+                case "UDP":
                     {
-                        metrics = new NetMetricsUDP();
-                        metrics.Connect(InputIP.Text, 8089);
+                        protocolType = NetStatistics.ProtocolType.UDP;
+                        break;
+                    }
+                default:
+                    throw new Exception("Unknown protocol type");
+            }
+            if (statistics != null)
+                if (statistics.Connected && statistics.Protocol == protocolType)
+                    return;
+            statistics = new NetStatistics(protocolType);
+            statistics.Graph = Graphs;
+            statistics.ResultTextbox = Result;
+            switch (protocolType)
+            {
+                case NetStatistics.ProtocolType.TCP:
+                    {
+                        statistics.Connect(InputIP.Text, 8080);
+                        break;
+                    }
+                case NetStatistics.ProtocolType.UDP:
+                    {
+                        statistics.Connect(InputIP.Text, 8089);
                         break;
                     }
                 default:
@@ -57,18 +65,8 @@ namespace Client
         }
         private void CloseConnection()
         {
-            if (metrics != null)
-                metrics.Close();
-        }
-        private void ShowStatistics(List<double> MetricCollection)
-        {
-            Graphs.Series["Graph"].Points.Clear();
-            double sum = 0;
-            for (int i = 0; i < MetricCollection.Count; i++)
-                sum += MetricCollection[i];
-            Result.Text = (sum / (double)MetricCollection.Count).ToString() + " ms";
-            for (int i = 0; i < TimeCollection.Count; i++)
-                Graphs.Series["Graph"].Points.AddXY(TimeCollection[i], MetricCollection[i]);
+            if (statistics != null)
+                statistics.Close();
         }
 
         private void OnClose(object sender, FormClosedEventArgs e)
@@ -79,99 +77,33 @@ namespace Client
         private void TestClick(object sender, EventArgs e)
         {
             Connect();
+            
             int index = MetricsChoose.SelectedIndex;
             switch (index)
             {
                 case 0:
                     {
-                        timer.Restart();
-                        PingCollection.Clear();
-                        TimeCollection.Clear();
-                        int N = Convert.ToInt32(TestsNumber.Value);
-                        metrics.Ping();
-                        for (int i = 0; i < N; i++)
-                        {
-                            Thread.Sleep(1);
-                            PingCollection.Add(metrics.Ping());
-                            TimeCollection.Add(timer.ElapsedMilliseconds / 1000.0);
-                            ShowStatistics(PingCollection);
-                        }
+                        statistics.StartTest(NetStatistics.MetricType.Ping, Convert.ToInt32(TestsNumber.Value));
                         break;
                     }
                 case 1:
                     {
-                        int time = Convert.ToInt32(FirstParameter.Text);
-                        timer.Restart();
-                        SpeedCollection.Clear();
-                        TimeCollection.Clear();
-                        int N = Convert.ToInt32(TestsNumber.Value);
-                        for (int i = 0; i < N; i++)
-                        {
-                            Thread.Sleep(1);
-                            SpeedCollection.Add(metrics.Speed(time));
-                            TimeCollection.Add(timer.ElapsedMilliseconds / 1000.0);
-                            ShowStatistics(SpeedCollection);
-                        }
+                        statistics.StartTest(NetStatistics.MetricType.Speed, Convert.ToInt32(TestsNumber.Value));
                         break;
                     }
                 case 2:
                     {
-                        timer.Restart();
-                        DelayCollection.Clear();
-                        TimeCollection.Clear();
-                        int N = Convert.ToInt32(TestsNumber.Value);
-                        metrics.Delay();
-                        for (int i = 0; i < N; i++)
-                        {
-                            Thread.Sleep(1);
-                            DelayCollection.Add(metrics.Delay());
-                            TimeCollection.Add(timer.ElapsedMilliseconds / 1000.0);
-                            ShowStatistics(DelayCollection);
-                        }
+                        statistics.StartTest(NetStatistics.MetricType.Delay, Convert.ToInt32(TestsNumber.Value));
                         break;
                     }
                 case 3:
                     {
-                        int packets = Convert.ToInt32(FirstParameter.Text);
-                        int packSize = Convert.ToInt32(SecondParameter.Text) * 1024;
-                        if (packSize >= 65000)
-                        {
-                            MessageBox.Show("Размер пакета не должен превышать 65000 байт");
-                            break;
-                        }
-                        timer.Restart();
-                        DeliveryKoefCollection.Clear();
-                        TimeCollection.Clear();
-                        int N = Convert.ToInt32(TestsNumber.Value);
-                        for (int i = 0; i < N; i++)
-                        {
-                            Thread.Sleep(1);
-                            DeliveryKoefCollection.Add(metrics.DeliveryCoef(packets, packSize));
-                            TimeCollection.Add(timer.ElapsedMilliseconds / 1000.0);
-                            ShowStatistics(DeliveryKoefCollection);
-                        }
+                        statistics.StartTest(NetStatistics.MetricType.DeliveryCoefficient, Convert.ToInt32(TestsNumber.Value));
                         break;
                     }
                 case 4:
                     {
-                        int packets = Convert.ToInt32(FirstParameter.Text);
-                        int packSize = Convert.ToInt32(SecondParameter.Text) * 1024;
-                        if (packSize >= 65000)
-                        {
-                            MessageBox.Show("Размер пакета не должен превышать 65000 байт");
-                            break;
-                        }
-                        timer.Restart();
-                        PacketLooseCollection.Clear();
-                        TimeCollection.Clear();
-                        int N = Convert.ToInt32(TestsNumber.Value);
-                        for (int i = 0; i < N; i++)
-                        {
-                            Thread.Sleep(1);
-                            PacketLooseCollection.Add(metrics.PacketLoss(packets, packSize));
-                            TimeCollection.Add(timer.ElapsedMilliseconds / 1000.0);
-                            ShowStatistics(PacketLooseCollection);
-                        }
+                        statistics.StartTest(NetStatistics.MetricType.PacketLoss, Convert.ToInt32(TestsNumber.Value));
                         break;
                     }
                 default:
