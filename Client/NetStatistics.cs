@@ -1,6 +1,8 @@
-﻿using System;
+﻿using OfficeOpenXml;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -25,51 +27,64 @@ namespace Client
             PacketLoss
         }
 
-        private List<double> pingCollection, speedCollection, delayCollection, deliveryCoefCollection, packetLooseCollection, timeCollection;
         private NetMetrics metrics;
-        private int speedTime;
-        private int dcPackSize, dcPackets;
-        private int plPackSize, plPackets;
         private Stopwatch timer;
-        private Chart graph;
-        private TextBox resultTextbox;
         private ProtocolType protocolType;
+        private ExcelPackage excelPackage;
+        private ExcelWorksheet sheet;
 
-        public List<double> PingCollection { get => pingCollection; }
-        public List<double> SpeedCollection { get => speedCollection; }
-        public List<double> DelayCollection { get => delayCollection; }
-        public List<double> DeliveryCoefCollection { get => deliveryCoefCollection; }
-        public List<double> PacketLooseCollection { get => packetLooseCollection; }
-        public List<double> TimeCollection { get => timeCollection; }
-        public int SpeedTime { get => speedTime; set => speedTime = value; }
-        public int DCPackSize { get => dcPackSize; set => dcPackSize = value; }
-        public int DCPackets { get => dcPackets; set => dcPackets = value; }
-        public int PlPackSize { get => plPackSize; set => plPackSize = value; }
-        public int PlPackets { get => plPackets; set => plPackets = value; }
-        public Chart Graph { get => graph; set => graph = value; }
-        public TextBox ResultTextbox { get => resultTextbox; set => resultTextbox = value; }
-        public bool Connected { get => metrics.Connected; }
-        internal ProtocolType Protocol { get => protocolType; }
+        public List<double> PingCollection { get; private set; }
+        public List<double> SpeedCollection { get; private set; }
+        public List<double> DelayCollection { get; private set; }
+        public List<double> DeliveryCoefCollection { get; private set; }
+        public List<double> PacketLossCollection { get; private set; }
+        public List<double> TimeCollection { get; private set; }
+        public int SpeedTime { get; set; }
+        public int DCPackSize { get; set; }
+        public int DCPackets { get; set; }
+        public int PLPackSize { get; set; }
+        public int PLPackets { get; set; }
+        public Chart Graph { get; set; }
+        public TextBox ResultTextbox { get; set; }
+        public bool Connected => metrics.Connected;
+        internal ProtocolType Protocol 
+        { 
+            get => protocolType; 
+            set
+            {
+                protocolType = value;
+                switch (protocolType)
+                {
+                    case ProtocolType.TCP:
+                        {
+                            metrics = new NetMetricsTCP();
+                            break;
+                        }
+                    case ProtocolType.UDP:
+                        {
+                            metrics = new NetMetricsUDP();
+                            break;
+                        }
+                    default:
+                        break;
+                }
+            }
+        }
 
         public NetStatistics(ProtocolType protocol)
         {
-            switch (protocol)
-            {
-                case ProtocolType.TCP:
-                    {
-                        metrics = new NetMetricsTCP();
-                        break;
-                    }
-                case ProtocolType.UDP:
-                    {
-                        metrics = new NetMetricsUDP();
-                        break;
-                    }
-                default:
-                    break;
-            }
             timer = new Stopwatch();
-            graph = null;
+            Protocol = protocol;
+            Graph = null;
+            ResultTextbox = null;
+            PingCollection = new List<double>();
+            SpeedCollection = new List<double>();
+            DelayCollection = new List<double>();
+            DeliveryCoefCollection = new List<double>();
+            PacketLossCollection = new List<double>();
+            TimeCollection = new List<double>();
+            excelPackage = new ExcelPackage();
+            sheet = excelPackage.Workbook.Worksheets.Add("Statistics");
         }
         public void Connect(string IP, int port)
         {
@@ -78,6 +93,42 @@ namespace Client
         public void Close()
         {
             metrics.Close();
+        }
+        public void ExportInExcel(string filename)
+        {
+            FileInfo fileInfo = new FileInfo(filename);
+            excelPackage.File = fileInfo;
+            if (PingCollection.Count != 0)
+            {
+                sheet.Cells[1, 1].Value = "Ping";
+                for (int i = 0; i < PingCollection.Count; i++)
+                    sheet.Cells[1, i + 2].Value = PingCollection[i];
+            }
+            if (SpeedCollection.Count != 0)
+            {
+                sheet.Cells[2, 1].Value = "Speed";
+                for (int i = 0; i < SpeedCollection.Count; i++)
+                    sheet.Cells[2, i + 2].Value = SpeedCollection[i];
+            }
+            if (DelayCollection.Count != 0)
+            {
+                sheet.Cells[3, 1].Value = "Delay";
+                for (int i = 0; i < DelayCollection.Count; i++)
+                    sheet.Cells[3, i + 2].Value = DelayCollection[i];
+            }
+            if (DeliveryCoefCollection.Count != 0)
+            {
+                sheet.Cells[4, 1].Value = "DC";
+                for (int i = 0; i < DeliveryCoefCollection.Count; i++)
+                    sheet.Cells[4, i + 2].Value = DeliveryCoefCollection[i];
+            }
+            if (PacketLossCollection.Count != 0)
+            {
+                sheet.Cells[5, 1].Value = "PL";
+                for (int i = 0; i < PacketLossCollection.Count; i++)
+                    sheet.Cells[5, i + 2].Value = PacketLossCollection[i];
+            }
+            excelPackage.SaveAs(fileInfo);
         }
         public void StartTest(MetricType type, int N)
         {
@@ -94,7 +145,7 @@ namespace Client
                             Thread.Sleep(1);
                             PingCollection.Add(metrics.Ping());
                             TimeCollection.Add(timer.ElapsedMilliseconds / 1000.0);
-                            ShowStatistics(PingCollection);
+                            ShowStatistics(PingCollection, "ms");
                         }
                         break;
                     }
@@ -106,9 +157,9 @@ namespace Client
                         for (int i = 0; i < N; i++)
                         {
                             Thread.Sleep(1);
-                            SpeedCollection.Add(metrics.Speed(speedTime));
+                            SpeedCollection.Add(metrics.Speed(SpeedTime));
                             TimeCollection.Add(timer.ElapsedMilliseconds / 1000.0);
-                            ShowStatistics(SpeedCollection);
+                            ShowStatistics(SpeedCollection, "MB/s");
                         }
                         break;
                     }
@@ -123,7 +174,7 @@ namespace Client
                             Thread.Sleep(1);
                             DelayCollection.Add(metrics.Delay());
                             TimeCollection.Add(timer.ElapsedMilliseconds / 1000.0);
-                            ShowStatistics(DelayCollection);
+                            ShowStatistics(DelayCollection, "ms");
                         }
                         break;
                     }
@@ -135,23 +186,23 @@ namespace Client
                         for (int i = 0; i < N; i++)
                         {
                             Thread.Sleep(1);
-                            DeliveryCoefCollection.Add(metrics.DeliveryCoef(dcPackets, dcPackSize));
+                            DeliveryCoefCollection.Add(metrics.DeliveryCoef(DCPackets, DCPackSize));
                             TimeCollection.Add(timer.ElapsedMilliseconds / 1000.0);
-                            ShowStatistics(DeliveryCoefCollection);
+                            ShowStatistics(DeliveryCoefCollection, "");
                         }
                         break;
                     }
                 case MetricType.PacketLoss:
                     {
                         timer.Restart();
-                        PacketLooseCollection.Clear();
+                        PacketLossCollection.Clear();
                         TimeCollection.Clear();
                         for (int i = 0; i < N; i++)
                         {
                             Thread.Sleep(1);
-                            PacketLooseCollection.Add(metrics.PacketLoss(plPackets, plPackSize));
+                            PacketLossCollection.Add(metrics.PacketLoss(PLPackets, PLPackSize));
                             TimeCollection.Add(timer.ElapsedMilliseconds / 1000.0);
-                            ShowStatistics(PacketLooseCollection);
+                            ShowStatistics(PacketLossCollection, "");
                         }
                         break;
                     }
@@ -159,15 +210,19 @@ namespace Client
                     break;
             }
         }
-        public void ShowStatistics(List<double> collection)
+        public void PeriodicTesting(List<MetricType> metricsTypes, int interval, int N, int numberOfPeriods)
         {
-            graph.Series["Graph"].Points.Clear();
+
+        }
+        public void ShowStatistics(List<double> collection, string unit)
+        {
+            Graph.Series["Values"].Points.Clear();
             double sum = 0;
             for (int i = 0; i < collection.Count; i++)
                 sum += collection[i];
-            ResultTextbox.Text = (sum / (double)collection.Count).ToString() + " ms";
+            ResultTextbox.Text = (sum / (double)collection.Count).ToString() + " " + unit;
             for (int i = 0; i < TimeCollection.Count; i++)
-                graph.Series["Graph"].Points.AddXY(TimeCollection[i], collection[i]);
+                Graph.Series["Values"].Points.AddXY(TimeCollection[i], collection[i]);
         }
     }
 }

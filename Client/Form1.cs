@@ -17,6 +17,7 @@ namespace Client
     public partial class Form1 : Form
     {
         NetStatistics statistics;
+        Thread testThread;
 
         public Form1()
         {
@@ -76,39 +77,31 @@ namespace Client
 
         private void TestClick(object sender, EventArgs e)
         {
+            //if (testThread != null)
+            //    if (testThread.IsAlive)
+            //        return;
             Connect();
             
             int index = MetricsChoose.SelectedIndex;
+            NetStatistics.MetricType metricType = NetStatistics.MetricType.Ping;
             switch (index)
             {
-                case 0:
-                    {
-                        statistics.StartTest(NetStatistics.MetricType.Ping, Convert.ToInt32(TestsNumber.Value));
-                        break;
-                    }
-                case 1:
-                    {
-                        statistics.StartTest(NetStatistics.MetricType.Speed, Convert.ToInt32(TestsNumber.Value));
-                        break;
-                    }
-                case 2:
-                    {
-                        statistics.StartTest(NetStatistics.MetricType.Delay, Convert.ToInt32(TestsNumber.Value));
-                        break;
-                    }
-                case 3:
-                    {
-                        statistics.StartTest(NetStatistics.MetricType.DeliveryCoefficient, Convert.ToInt32(TestsNumber.Value));
-                        break;
-                    }
-                case 4:
-                    {
-                        statistics.StartTest(NetStatistics.MetricType.PacketLoss, Convert.ToInt32(TestsNumber.Value));
-                        break;
-                    }
+                case 0: { metricType = NetStatistics.MetricType.Ping; break; }
+                case 1: { metricType = NetStatistics.MetricType.Speed; 
+                        statistics.SpeedTime = Convert.ToInt32(FirstParameter.Text); break; }
+                case 2: { metricType = NetStatistics.MetricType.Delay; break; }
+                case 3: { metricType = NetStatistics.MetricType.DeliveryCoefficient; 
+                        statistics.DCPackets = Convert.ToInt32(FirstParameter.Text);
+                        statistics.DCPackSize = Convert.ToInt32(SecondParameter.Text); break; }
+                case 4: { metricType = NetStatistics.MetricType.PacketLoss;
+                        statistics.PLPackets = Convert.ToInt32(FirstParameter.Text);
+                        statistics.PLPackSize = Convert.ToInt32(SecondParameter.Text); break; }
                 default:
                     break;
             }
+            //testThread = new Thread(delegate() { statistics.StartTest(metricType, Convert.ToInt32(TestsNumber.Value)); });
+            //testThread.Start();
+            statistics.StartTest(metricType, Convert.ToInt32(TestsNumber.Value));
         }
 
         private void ChangeTextboxValues(string lable1, string lable2, string val1, string val2, bool val1En, bool val2En)
@@ -161,6 +154,11 @@ namespace Client
         private void Form1_Load(object sender, EventArgs e)
         {
 
+        }
+
+        private void ExportStripClick(object sender, EventArgs e)
+        {
+            statistics.ExportInExcel("Stat.xlsx");
         }
     }
 }
